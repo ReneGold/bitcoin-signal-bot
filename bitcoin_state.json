@@ -1,4 +1,16 @@
 {
-  "last_processed": "2026-09-27T17:15:00+00:00",
-  "plan": null
+  "last_processed": "2026-09-27T17:30:00+00:00",
+  "plan": {
+    "direction": 1,
+    "signal_time": "2026-09-27T17:30:00+00:00",
+    "entry": 84476.79,
+    "sl": 84352.9776147658,
+    "tp1": 84569.64928892563,
+    "tp2": 84662.50857785129,
+    "tp3": 84755.36786677694,
+    "signal_type": "FRUEH / BULL ENGULF",
+    "pattern": "BULL ENGULF",
+    "tp1_hit": false,
+    "tp2_hit": false
+  }
 }
