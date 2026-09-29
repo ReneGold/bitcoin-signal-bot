@@ -1,5 +1,5 @@
 {
-  "last_processed": "2026-09-29T07:00:00+00:00",
+  "last_processed": "2026-09-29T07:30:00+00:00",
   "plan": {
     "direction": 1,
     "signal_time": "2026-09-29T06:30:00+00:00",
@@ -10,7 +10,7 @@
     "tp3": 84355.1528270909,
     "signal_type": "TRENDFOLGE / HAMMER",
     "pattern": "HAMMER",
-    "tp1_hit": false,
+    "tp1_hit": true,
     "tp2_hit": false
   }
 }
