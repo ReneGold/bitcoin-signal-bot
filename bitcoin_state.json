@@ -1,5 +1,5 @@
 {
-  "last_processed": "2026-10-01T16:45:00+00:00",
+  "last_processed": "2026-10-01T17:15:00+00:00",
   "plan": {
     "direction": 1,
     "signal_time": "2026-10-01T16:00:00+00:00",
@@ -10,7 +10,7 @@
     "tp3": 85450.4258370622,
     "signal_type": "TRENDFOLGE / BULL ENGULF",
     "pattern": "BULL ENGULF",
-    "tp1_hit": false,
+    "tp1_hit": true,
     "tp2_hit": false
   }
 }
