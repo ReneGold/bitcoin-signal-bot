@@ -1,4 +1,16 @@
 {
-  "last_processed": "2026-10-03T07:30:00+00:00",
-  "plan": null
+  "last_processed": "2026-10-03T07:45:00+00:00",
+  "plan": {
+    "direction": -1,
+    "signal_time": "2026-10-03T07:45:00+00:00",
+    "entry": 84560.0,
+    "sl": 84664.6071663972,
+    "tp1": 84481.5446252021,
+    "tp2": 84403.08925040421,
+    "tp3": 84324.6338756063,
+    "signal_type": "TRENDFOLGE / BEAR ENGULF",
+    "pattern": "BEAR ENGULF",
+    "tp1_hit": false,
+    "tp2_hit": false
+  }
 }
