@@ -1,4 +1,16 @@
 {
-  "last_processed": "2026-10-06T03:15:00+00:00",
-  "plan": null
+  "last_processed": "2026-10-06T03:45:00+00:00",
+  "plan": {
+    "direction": 1,
+    "signal_time": "2026-10-06T03:45:00+00:00",
+    "entry": 85516.27,
+    "sl": 85283.88171988547,
+    "tp1": 85690.5612100859,
+    "tp2": 85864.85242017181,
+    "tp3": 86039.14363025772,
+    "signal_type": "FRUEH / HAMMER",
+    "pattern": "HAMMER",
+    "tp1_hit": false,
+    "tp2_hit": false
+  }
 }
