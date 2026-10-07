@@ -36,13 +36,15 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GITHUB_ACTIONS: "true"
         run: python bitcoin_signal_bot.py
-       - name: Telegram Cloud-Test
+
+      - name: Telegram Cloud-Test
         if: github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python -c 'import os,requests; token=os.environ["TELEGRAM_BOT_TOKEN"].strip(); chat_id=os.environ["TELEGRAM_CHAT_ID"].strip(); r=requests.post(f"https://api.telegram.org/bot{token}/sendMessage",json={"chat_id":chat_id,"text":"BITCOIN DEMO V3.8 Cloud-Test erfolgreich"},timeout=20); r.raise_for_status(); print("Telegram Cloud-Test OK")'
+
       - name: Bot-Zustand speichern
         run: |
           if [ -f bitcoin_state.json ]; then
