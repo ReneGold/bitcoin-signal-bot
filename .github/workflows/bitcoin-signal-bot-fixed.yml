@@ -45,7 +45,7 @@ jobs:
           python - <<'PY'
           import os, requests
 
-          token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
+     token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
 chat_id = os.environ["TELEGRAM_CHAT_ID"].strip()
 
           r = requests.post(
