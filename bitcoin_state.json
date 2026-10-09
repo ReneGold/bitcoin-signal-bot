@@ -1,4 +1,18 @@
 {
-  "last_processed": "2026-10-09T00:45:00+00:00",
-  "plan": null
+  "last_processed": "2026-10-09T01:15:00+00:00",
+  "plan": {
+    "direction": -1,
+    "signal_time": "2026-10-09T01:00:00+00:00",
+    "entry": 81732.01,
+    "sl": 81962.5103562513,
+    "tp1": 81559.13473281152,
+    "tp2": 81386.25946562304,
+    "tp3": 81213.38419843456,
+    "signal_type": "TRENDFOLGE / SHOOTING STAR",
+    "pattern": "SHOOTING STAR",
+    "score": 70,
+    "score_detail": "1H=SHORT | Struktur=LH/LL | BOS/CHoCH=nein | Sweep=nein | FVG=ja | Fib=nein",
+    "tp1_hit": false,
+    "tp2_hit": false
+  }
 }
