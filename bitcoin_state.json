@@ -1,18 +1,4 @@
 {
-  "last_processed": "2026-10-13T22:30:00+00:00",
-  "plan": {
-    "direction": 1,
-    "signal_time": "2026-10-13T21:30:00+00:00",
-    "entry": 83467.27,
-    "sl": 83260.58080811078,
-    "tp1": 83622.28689391693,
-    "tp2": 83777.30378783384,
-    "tp3": 83932.32068175075,
-    "signal_type": "MOMENTUM-WENDE",
-    "pattern": "Momentum-Wende",
-    "score": 75,
-    "score_detail": "1H=LONG | Struktur=HH/HL | BOS/CHoCH=ja | Sweep=nein | FVG=ja | Fib=nein",
-    "tp1_hit": false,
-    "tp2_hit": false
-  }
+  "last_processed": "2026-10-13T23:15:00+00:00",
+  "plan": null
 }
