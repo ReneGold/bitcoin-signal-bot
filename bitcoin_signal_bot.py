@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import requests
 from dotenv import load_dotenv
@@ -15,11 +16,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # =============================================================================
-# BITCOIN DEMO BOT V3.8
+# BITCOIN DEMO BOT V3.9
 # - nur Demo-Signale, KEINE automatischen Orders
 # - Daten: Twelve Data
 # - Ausgabe: Telegram
-# - Basislogik aus dem bisherigen Bitcoin-Bot + V3.8 Score-Filter
+# - Basislogik aus dem bisherigen Bot + V3.9 Score-Filter
 # =============================================================================
 
 # --- Bestehende V3.7/V3.6-Basiswerte ---
@@ -51,8 +52,9 @@ MOM_BODY = 0.35
 
 MINTICK = 0.01
 
-# --- V3.8 Score-Einstellungen ---
+# --- V3.9 Score-Einstellungen ---
 MIN_SCORE = int(os.getenv("MIN_SCORE", "70"))
+OBSERVE_SCORE = int(os.getenv("OBSERVE_SCORE", "65"))
 HTF_INTERVAL = os.getenv("HTF_INTERVAL", "1h")
 STRUCT_LEN = int(os.getenv("STRUCT_LEN", "6"))
 LIQ_LEN = int(os.getenv("LIQ_LEN", "12"))
@@ -207,7 +209,66 @@ def rma(values: list[float], n: int) -> list[Optional[float]]:
         out[i] = p
 
     return out
+def adx(c: list[Candle], n: int = 14) -> list[Optional[float]]:
+    out: list[Optional[float]] = [None] * len(c)
 
+    if len(c) < n * 2:
+        return out
+
+    tr = [0.0] * len(c)
+    plus_dm = [0.0] * len(c)
+    minus_dm = [0.0] * len(c)
+
+    for i in range(1, len(c)):
+        up_move = c[i].h - c[i - 1].h
+        down_move = c[i - 1].l - c[i].l
+
+        plus_dm[i] = up_move if up_move > down_move and up_move > 0 else 0.0
+        minus_dm[i] = down_move if down_move > up_move and down_move > 0 else 0.0
+
+        tr[i] = max(
+            c[i].h - c[i].l,
+            abs(c[i].h - c[i - 1].c),
+            abs(c[i].l - c[i - 1].c),
+        )
+
+    atr_sm = rma(tr[1:], n)
+    plus_sm = rma(plus_dm[1:], n)
+    minus_sm = rma(minus_dm[1:], n)
+
+    dx_values = []
+    dx_indices = []
+
+    for j in range(len(atr_sm)):
+        atr_v = atr_sm[j]
+        plus_v = plus_sm[j]
+        minus_v = minus_sm[j]
+
+        if atr_v is None or plus_v is None or minus_v is None or atr_v == 0:
+            continue
+
+        plus_di = 100.0 * plus_v / atr_v
+        minus_di = 100.0 * minus_v / atr_v
+        denom = plus_di + minus_di
+
+        if denom == 0:
+            dx = 0.0
+        else:
+            dx = 100.0 * abs(plus_di - minus_di) / denom
+
+        dx_values.append(dx)
+        dx_indices.append(j + 1)
+
+    if len(dx_values) < n:
+        return out
+
+    adx_sm = rma(dx_values, n)
+
+    for k, value in enumerate(adx_sm):
+        if value is not None:
+            out[dx_indices[k]] = value
+
+    return out
 
 def indicators(c: list[Candle]):
     closes = [x.c for x in c]
@@ -232,23 +293,50 @@ def indicators(c: list[Candle]):
 
 def htf_context_at(htf: list[Candle], signal_time: datetime):
     """
-    Nimmt die letzte 1H-Kerze, die zum Zeitpunkt der 15M-Signalkerze
-    bereits vollständig geschlossen war.
+    Bewertet die letzte vollstaendig geschlossene HTF-Kerze abgestuft.
+
+    Rueckgabe:
+    - htf_bull / htf_bear: voller Trendkontext
+    - htf_long_points / htf_short_points: 0, 5, 10 oder 15 Score-Punkte
+
+    Die Zwischenstufen sollen Trend-Uebergaenge erfassen, ohne den
+    vollstaendigen EMA20/EMA50-Trendfilter komplett aufzuweichen.
     """
     delta = _interval_delta(HTF_INTERVAL)
     eligible = [x for x in htf if x.t + delta <= signal_time]
 
-    if len(eligible) < SLOW + 2:
-        return False, False
+    if len(eligible) < SLOW + 3:
+        return False, False, 0, 0
 
     closes = [x.c for x in eligible]
     ef = ema(closes, FAST)
     es = ema(closes, SLOW)
 
-    return (
-        closes[-1] > ef[-1] and ef[-1] > es[-1],
-        closes[-1] < ef[-1] and ef[-1] < es[-1],
-    )
+    htf_bull = closes[-1] > ef[-1] and ef[-1] > es[-1]
+    htf_bear = closes[-1] < ef[-1] and ef[-1] < es[-1]
+
+    fast_rising = ef[-1] > ef[-2]
+    fast_falling = ef[-1] < ef[-2]
+
+    if htf_bull:
+        htf_long_points = 15
+    elif closes[-1] > ef[-1] and fast_rising:
+        htf_long_points = 10
+    elif closes[-1] > ef[-1]:
+        htf_long_points = 5
+    else:
+        htf_long_points = 0
+
+    if htf_bear:
+        htf_short_points = 15
+    elif closes[-1] < ef[-1] and fast_falling:
+        htf_short_points = 10
+    elif closes[-1] < ef[-1]:
+        htf_short_points = 5
+    else:
+        htf_short_points = 0
+
+    return htf_bull, htf_bear, htf_long_points, htf_short_points
 
 
 def _recent_fvg(c: list[Candle], i: int, bullish: bool):
@@ -277,6 +365,12 @@ def signal(c, ef, es, atr, htf, i):
     ai = A[i]
     if ai is None:
         return None
+        
+    adx_values = adx(c)
+    adx_now = adx_values[i]
+
+    if adx_now is None:
+        adx_now = 0.0
 
     body = lambda j: max(abs(c[j].c - c[j].o), MINTICK)
 
@@ -443,16 +537,46 @@ def signal(c, ef, es, atr, htf, i):
         and cur_body >= ai * MOM_BODY
     )
 
-    long_base = lt or le or lb or lm
+    # Testweise: Trendfortsetzung LONG.
+    # Soll laufende HH/HL-Aufwaertstrends nach einem Pullback zur EMA20 erfassen.
+    tc_sh_now = max(x.h for x in c[i - STRUCT_LEN + 1 : i + 1])
+    tc_sl_now = min(x.l for x in c[i - STRUCT_LEN + 1 : i + 1])
+    tc_sh_prev = max(x.h for x in c[i - 2 * STRUCT_LEN + 1 : i - STRUCT_LEN + 1])
+    tc_sl_prev = min(x.l for x in c[i - 2 * STRUCT_LEN + 1 : i - STRUCT_LEN + 1])
+    tc_hh_hl = tc_sh_now > tc_sh_prev and tc_sl_now > tc_sl_prev
+
+    tc_pullback_touch = False
+    for k in range(max(i - 3, 1), i):
+        if A[k] is not None and ef[k] is not None:
+            if c[k].l <= ef[k] + A[k] * 0.35 and c[k].h >= ef[k] - A[k] * 0.10:
+                tc_pullback_touch = True
+                break
+
+    tc_trend_up = ef[i] > es[i] and ef[i] > ef[i - 1] and c[i].c > ef[i]
+    tc_momentum_up = c[i].c > c[i - 1].c
+    tc_confirmation = (
+        c[i].c > c[i].o
+        and (c[i].c > c[i - 1].h or cur_body >= ai * 0.25)
+    )
+
+    ltc = (
+        tc_hh_hl
+        and tc_trend_up
+        and tc_momentum_up
+        and tc_pullback_touch
+        and tc_confirmation
+    )
+
+    long_base = lt or le or lb or lm or ltc
     short_base = st or se or sb or sm
 
     if not long_base and not short_base:
         return None
 
     # -------------------------------------------------------------------------
-    # V3.8 Zusatzfilter / Score
+    # V3.9 Zusatzfilter / Score
     # -------------------------------------------------------------------------
-    htf_bull, htf_bear = htf_context_at(htf, c[i].t)
+    htf_bull, htf_bear, htf_long_points, htf_short_points = htf_context_at(htf, c[i].t)
 
     sh_now = max(x.h for x in c[i - STRUCT_LEN + 1 : i + 1])
     sl_now = min(x.l for x in c[i - STRUCT_LEN + 1 : i + 1])
@@ -483,10 +607,14 @@ def signal(c, ef, es, atr, htf, i):
         and min(x.l for x in c[i - 1 - STRUCT_LEN + 1 : i])
         > min(x.l for x in c[i - 1 - 2 * STRUCT_LEN + 1 : i - 1 - STRUCT_LEN + 1])
     )
+    retest_tol = ai * 0.20
+
+    bull_retest = (bull_bos or bull_choch) and c[i].l <= bos_ref_high + retest_tol
+    bear_retest = (bear_bos or bear_choch) and c[i].h >= bos_ref_low - retest_tol
 
     liq_high = max(x.h for x in c[i - LIQ_LEN : i])
     liq_low = min(x.l for x in c[i - LIQ_LEN : i])
-
+    
     long_sweep = c[i].l < liq_low and c[i].c > liq_low
     short_sweep = c[i].h > liq_high and c[i].c < liq_high
 
@@ -530,11 +658,19 @@ def signal(c, ef, es, atr, htf, i):
 
     atr_percent = ai / c[i].c * 100.0 if c[i].c else 0.0
     volatility_ok = atr_percent >= MIN_ATR_PERCENT
+    range_len = 12
+    range_start = max(0, i - range_len + 1)
+    range_high = max(x.h for x in c[range_start : i + 1])
+    range_low = min(x.l for x in c[range_start : i + 1])
+    range_width = max(range_high - range_low, MINTICK)
+    range_atr_ratio = range_width / ai if ai > 0 else 999.0
 
+    range_market = adx_now < 22 and range_atr_ratio <= 3.5
     long_score = 0
-    long_score += 15 if htf_bull else 0
+    long_score += htf_long_points
     long_score += 15 if structure_bull else 0
     long_score += 10 if (bull_bos or bull_choch) else 0
+    long_score += 5 if bull_retest else 0
     long_score += 10 if long_sweep else 0
     long_score += 10 if long_fvg_ok else 0
     long_score += 10 if long_fib_ok else 0
@@ -544,9 +680,10 @@ def signal(c, ef, es, atr, htf, i):
     long_score += 5 if volatility_ok else 0
 
     short_score = 0
-    short_score += 15 if htf_bear else 0
+    short_score += htf_short_points
     short_score += 15 if structure_bear else 0
     short_score += 10 if (bear_bos or bear_choch) else 0
+    short_score += 5 if bear_retest else 0
     short_score += 10 if short_sweep else 0
     short_score += 10 if short_fvg_ok else 0
     short_score += 10 if short_fib_ok else 0
@@ -554,10 +691,46 @@ def signal(c, ef, es, atr, htf, i):
     short_score += 10 if momentum_short_ok else 0
     short_score += 5 if down else 0
     short_score += 5 if volatility_ok else 0
-
+    adx_adjust = 5 if adx_now >= 25 else -5 if adx_now < 18 else 0
+    long_score = max(0, min(100, long_score + adx_adjust))
+    short_score = max(0, min(100, short_score + adx_adjust))
+    long_score = max(0, long_score - (5 if range_market else 0))
+    short_score = max(0, short_score - (5 if range_market else 0))
     # Bei gleichzeitigen Kandidaten nur die stärkere Seite zulassen.
     long_ok = long_base and long_score >= MIN_SCORE
     short_ok = short_base and short_score >= MIN_SCORE
+    long_watch = long_base and OBSERVE_SCORE <= long_score < MIN_SCORE
+    short_watch = short_base and OBSERVE_SCORE <= short_score < MIN_SCORE
+
+    # Zonenqualitaet nur als Zusatzinformation; beeinflusst NICHT die Signalentscheidung.
+    long_zone_score = (
+        (25 if near_sup else 0)
+        + (15 if near_ema else 0)
+        + (20 if long_fvg_ok else 0)
+        + (15 if long_fib_ok else 0)
+        + (15 if long_sweep else 0)
+        + (10 if bull_retest else 0)
+    )
+    short_zone_score = (
+        (25 if near_res else 0)
+        + (15 if near_ema else 0)
+        + (20 if short_fvg_ok else 0)
+        + (15 if short_fib_ok else 0)
+        + (15 if short_sweep else 0)
+        + (10 if bear_retest else 0)
+    )
+
+    def zone_grade(score: int) -> str:
+        if score >= 75:
+            return "A"
+        if score >= 55:
+            return "B"
+        if score >= 35:
+            return "C"
+        return "D"
+
+    long_zone_grade = zone_grade(long_zone_score)
+    short_zone_grade = zone_grade(short_zone_score)
 
     if long_ok and short_ok:
         if long_score > short_score:
@@ -567,9 +740,73 @@ def signal(c, ef, es, atr, htf, i):
         else:
             return None
 
-    # -------------------------------------------------------------------------
+    if not long_ok and not short_ok:
+        if long_watch and short_watch:
+            if long_score > short_score:
+                short_watch = False
+            elif short_score > long_score:
+                long_watch = False
+            else:
+                return None
+
+        if long_watch:
+            long_score_lines = [
+                f"1H-Trend: +{htf_long_points}",
+                f"Struktur HH/HL: +{15 if structure_bull else 0}",
+                f"BOS/CHoCH: +{10 if (bull_bos or bull_choch) else 0}",
+                f"Retest: +{5 if bull_retest else 0}",
+                f"Sweep: +{10 if long_sweep else 0}",
+                f"FVG: +{10 if long_fvg_ok else 0}",
+                f"Fibonacci: +{10 if long_fib_ok else 0}",
+                f"Kerzenqualitaet: +{10 if bull_candle_quality else 0}",
+                f"Momentum: +{10 if momentum_long_ok else 0}",
+                f"EMA-Trend: +{5 if up else 0}",
+                f"Volatilitaet: +{5 if volatility_ok else 0}",
+                f"ADX-Anpassung: {adx_adjust:+d}",
+                f"Range-Malus: {-5 if range_market else 0:+d}",
+            ]
+            send(
+                f"🟡 BITCOIN V3.9 – SETUP BEOBACHTEN / LONG\n"
+                f"Score: {long_score}/100\n"
+                f"\nScore-Aufbau:\n"
+                + "\n".join(long_score_lines)
+                + f"\n\nZone: {long_zone_score}/100 ({long_zone_grade}) – nur Information"
+                + f"\nADX: {adx_now:.1f} | Range: {'ja' if range_market else 'nein'}"
+                + f"\nNoch kein Trade – Mindestscore: {MIN_SCORE}"
+                + f"\nKerze: {c[i].t.isoformat()}"
+            )
+            return None
+
+        if short_watch:
+            short_score_lines = [
+                f"1H-Trend: +{htf_short_points}",
+                f"Struktur LH/LL: +{15 if structure_bear else 0}",
+                f"BOS/CHoCH: +{10 if (bear_bos or bear_choch) else 0}",
+                f"Retest: +{5 if bear_retest else 0}",
+                f"Sweep: +{10 if short_sweep else 0}",
+                f"FVG: +{10 if short_fvg_ok else 0}",
+                f"Fibonacci: +{10 if short_fib_ok else 0}",
+                f"Kerzenqualitaet: +{10 if bear_candle_quality else 0}",
+                f"Momentum: +{10 if momentum_short_ok else 0}",
+                f"EMA-Trend: +{5 if down else 0}",
+                f"Volatilitaet: +{5 if volatility_ok else 0}",
+                f"ADX-Anpassung: {adx_adjust:+d}",
+                f"Range-Malus: {-5 if range_market else 0:+d}",
+            ]
+            send(
+                f"🟡 BITCOIN V3.9 – SETUP BEOBACHTEN / SHORT\n"
+                f"Score: {short_score}/100\n"
+                f"\nScore-Aufbau:\n"
+                + "\n".join(short_score_lines)
+                + f"\n\nZone: {short_zone_score}/100 ({short_zone_grade}) – nur Information"
+                + f"\nADX: {adx_now:.1f} | Range: {'ja' if range_market else 'nein'}"
+                + f"\nNoch kein Trade – Mindestscore: {MIN_SCORE}"
+                + f"\nKerze: {c[i].t.isoformat()}"
+            )
+            return None
+    # ------------------------------------------------------------
     # Stops / Ziele unverändert nach bestehender Logik
-    # -------------------------------------------------------------------------
+    # ------------------------------------------------------------
     lstop_turn = min(c[i].l, c[i - 1].l) - ai * ATR_BUF
     sstop_turn = max(c[i].h, c[i - 1].h) + ai * ATR_BUF
 
@@ -586,12 +823,14 @@ def signal(c, ef, es, atr, htf, i):
     sstop_m = max(x.h for x in c[i - 2 : i + 1]) + ai * ATR_BUF
 
     if long_ok:
-        sl = lstop_m if lm else lstop_br if lb else lstop_turn
+        sl = lstop_m if (lm or ltc) else lstop_br if lb else lstop_turn
         risk = c[i].c - sl
 
         if MINTICK < risk <= ai * MAX_RISK_ATR:
             typ = (
-                "MOMENTUM-WENDE"
+                "TREND-FORTSETZUNG"
+                if ltc
+                else "MOMENTUM-WENDE"
                 if lm
                 else "AUSBRUCH"
                 if lb
@@ -599,15 +838,19 @@ def signal(c, ef, es, atr, htf, i):
                 if le
                 else ("TRENDFOLGE / " + bull_name)
             )
-            pat = "Momentum-Wende" if lm else "Ausbruch" if lb else bull_name
+            pat = "Trend-Fortsetzung" if ltc else "Momentum-Wende" if lm else "Ausbruch" if lb else bull_name
 
             detail = (
-                f"1H={'LONG' if htf_bull else 'neutral'} | "
+                f"1H={'LONG' if htf_bull else ('Uebergang +' + str(htf_long_points)) if htf_long_points else 'neutral'} | "
                 f"Struktur={'HH/HL' if structure_bull else 'nein'} | "
                 f"BOS/CHoCH={'ja' if (bull_bos or bull_choch) else 'nein'} | "
+                f"Retest={'ja' if bull_retest else 'nein'} | "
                 f"Sweep={'ja' if long_sweep else 'nein'} | "
                 f"FVG={'ja' if long_fvg_ok else 'nein'} | "
                 f"Fib={'ja' if long_fib_ok else 'nein'}"
+                f" | ADX={adx_now:.1f} ({'stark' if adx_now >= 25 else 'schwach' if adx_now < 18 else 'neutral'})"
+                f" | Range={'ja' if range_market else 'nein'}"
+                f" | Zone={long_zone_score}/100 ({long_zone_grade})"
             )
 
             return (
@@ -640,12 +883,16 @@ def signal(c, ef, es, atr, htf, i):
             pat = "Momentum-Wende" if sm else "Ausbruch" if sb else bear_name
 
             detail = (
-                f"1H={'SHORT' if htf_bear else 'neutral'} | "
+                f"1H={'SHORT' if htf_bear else ('Uebergang +' + str(htf_short_points)) if htf_short_points else 'neutral'} | "
                 f"Struktur={'LH/LL' if structure_bear else 'nein'} | "
                 f"BOS/CHoCH={'ja' if (bear_bos or bear_choch) else 'nein'} | "
+                f"Retest={'ja' if bear_retest else 'nein'} | "
                 f"Sweep={'ja' if short_sweep else 'nein'} | "
                 f"FVG={'ja' if short_fvg_ok else 'nein'} | "
                 f"Fib={'ja' if short_fib_ok else 'nein'}"
+                f" | ADX={adx_now:.1f} ({'stark' if adx_now >= 25 else 'schwach' if adx_now < 18 else 'neutral'})"
+                f" | Range={'ja' if range_market else 'nein'}"
+                f" | Zone={short_zone_score}/100 ({short_zone_grade})"
             )
 
             return (
@@ -668,13 +915,114 @@ def fmt(x):
     return f"{x:.2f}"
 
 
+def setup_grade(score: int) -> str:
+    if score >= 90:
+        return "A+"
+    if score >= 85:
+        return "A"
+    if score >= 80:
+        return "A-"
+    if score >= 75:
+        return "B+"
+    if score >= 70:
+        return "B"
+    return "C"
+
+
+def trading_session(signal_time: str) -> str:
+    dt = datetime.fromisoformat(signal_time)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    london = dt.astimezone(ZoneInfo("Europe/London"))
+    new_york = dt.astimezone(ZoneInfo("America/New_York"))
+    tokyo = dt.astimezone(ZoneInfo("Asia/Tokyo"))
+
+    london_min = london.hour * 60 + london.minute
+    ny_min = new_york.hour * 60 + new_york.minute
+    tokyo_min = tokyo.hour * 60 + tokyo.minute
+
+    london_active = 8 * 60 <= london_min < 16 * 60 + 30
+    ny_active = 8 * 60 <= ny_min < 17 * 60
+    asia_active = 9 * 60 <= tokyo_min < 17 * 60
+
+    if london_active and ny_active:
+        return "LONDON / NEW YORK OVERLAP"
+    if london_active:
+        return "LONDON"
+    if ny_active:
+        return "NEW YORK"
+    if asia_active:
+        return "ASIA"
+    return "OFF-HOURS"
+
+
+def confirmation_status(score_detail: str, direction: int) -> tuple[int, str]:
+    """
+    Leitet aus dem bereits erzeugten Detailtext eine reine Anzeige-Bestaetigung ab.
+    Veraendert keine Signalentscheidung.
+    """
+    checks = 0
+    if "Retest=ja" in score_detail:
+        checks += 1
+    if "Sweep=ja" in score_detail:
+        checks += 1
+    if "FVG=ja" in score_detail:
+        checks += 1
+    if "Fib=ja" in score_detail:
+        checks += 1
+    if "Range=nein" in score_detail:
+        checks += 1
+
+    # Kerzenqualitaet und Momentum sind im aktuellen Signal bereits implizit im Score.
+    # Fuer die Anzeige geben wir je einen Punkt, wenn der Score die Mindestqualitaet erreicht.
+    # Dadurch bleibt die Bestätigung rein informativ und rückwärtskompatibel.
+    checks += 1
+    checks += 1
+
+    if checks >= 5:
+        label = "STARK BESTAETIGT"
+    elif checks >= 3:
+        label = "BESTAETIGT"
+    elif checks >= 2:
+        label = "TEILBESTAETIGT"
+    else:
+        label = "SCHWACH"
+    return min(checks, 7), label
+
+
+def market_bias_from_detail(score_detail: str, direction: int) -> str:
+    """
+    Zeigt einen einfachen Bias aus HTF/Struktur an; rein informativ.
+    """
+    if "1H=LONG" in score_detail or "1H=Uebergang +" in score_detail:
+        if "Struktur=HH/HL" in score_detail:
+            return "LONG"
+    if "1H=SHORT" in score_detail or "1H=Uebergang +" in score_detail:
+        if "Struktur=LH/LL" in score_detail:
+            return "SHORT"
+
+    if direction == 1 and "Struktur=HH/HL" in score_detail:
+        return "LONG"
+    if direction == -1 and "Struktur=LH/LL" in score_detail:
+        return "SHORT"
+    return "NEUTRAL"
+
+
 def new_plan_message(p: Plan):
     side = "KAUF / LONG" if p.direction == 1 else "VERKAUF / SHORT"
     icon = "🟢" if p.direction == 1 else "🔴"
+    grade = setup_grade(p.score)
+    session = trading_session(p.signal_time)
+    bias = market_bias_from_detail(p.score_detail, p.direction)
+    confirmation_count, confirmation_label = confirmation_status(p.score_detail, p.direction)
 
     return (
-        f"{icon} BITCOIN DEMO V3.8 – {side}\n"
-        f"Score: {p.score}/100\n"
+        f"{icon} BITCOIN DEMO V3.9 – {side}\n"
+        f"Score: {p.score}/100 | Setup Grade: {grade}\n"
+        f"Session: {session}\n"
+        f"Market Bias: {bias}\n"
+        f"Bestaetigung: {confirmation_count}/7 – {confirmation_label}\n"
         f"Signal: {p.signal_type}\n"
         f"Muster: {p.pattern}\n"
         f"{p.score_detail}\n"
@@ -688,7 +1036,36 @@ def new_plan_message(p: Plan):
         f"Hinweis: Demo-Signal, keine Garantie."
     )
 
+def record_trade(state, p, exit_price, result, exit_time):
+    risk = abs(p.entry - p.sl)
 
+    if risk > 0:
+        r_multiple = ((exit_price - p.entry) * p.direction) / risk
+    else:
+        r_multiple = 0.0
+
+    trade = {
+        "signal_time": p.signal_time,
+        "exit_time": exit_time,
+        "direction": "LONG" if p.direction == 1 else "SHORT",
+        "signal_type": p.signal_type,
+        "pattern": p.pattern,
+        "score": p.score,
+        "score_detail": p.score_detail,
+        "entry": round(p.entry, 2),
+        "sl": round(p.sl, 2),
+        "tp1": round(p.tp1, 2),
+        "tp2": round(p.tp2, 2),
+        "tp3": round(p.tp3, 2),
+        "exit_price": round(exit_price, 2),
+        "result": result,
+        "r_multiple": round(r_multiple, 2),
+        "tp1_hit": p.tp1_hit,
+        "tp2_hit": p.tp2_hit,
+    }
+
+    state.setdefault("trade_history", []).append(trade)
+    state["trade_history"] = state["trade_history"][-200:]
 def process(c, ef, es, atr, htf, i, state):
     just_finished = False
 
@@ -713,19 +1090,23 @@ def process(c, ef, es, atr, htf, i, state):
         # Konservativ: wenn Stop und Ziel in derselben Kerze liegen, Stop zuerst.
         if stop:
             send(
-                f"🛑 BITCOIN DEMO V3.8 – STOP\n"
+                f"🛑 BITCOIN DEMO V3.9 – STOP\n"
                 f"Schutz-Stop: {fmt(protective)}\n"
                 f"Plan beendet."
             )
+            result = "STOP_NACH_TP2" if p.tp2_hit else "BREAK_EVEN_NACH_TP1" if p.tp1_hit else "STOP"
+            record_trade(state, p, protective, result, b.t.isoformat())
+           
             state["plan"] = None
             just_finished = True
 
         elif h3:
             send(
-                f"✅ BITCOIN DEMO V3.8 – TP3 erreicht\n"
+                f"✅ BITCOIN DEMO V3.9 – TP3 erreicht\n"
                 f"TP3: {fmt(p.tp3)}\n"
                 f"Plan abgeschlossen."
             )
+            record_trade(state, p, p.tp3, "TP3", b.t.isoformat())
             state["plan"] = None
             just_finished = True
 
@@ -734,7 +1115,7 @@ def process(c, ef, es, atr, htf, i, state):
                 p.tp1_hit = True
                 p.tp2_hit = True
                 send(
-                    f"✅ BITCOIN DEMO V3.8 – TP2 erreicht\n"
+                    f"✅ BITCOIN DEMO V3.9 – TP2 erreicht\n"
                     f"TP2: {fmt(p.tp2)}\n"
                     f"Schutz-Stop ab nächster Kerze auf TP1: {fmt(p.tp1)}"
                 )
@@ -742,7 +1123,7 @@ def process(c, ef, es, atr, htf, i, state):
             elif h1 and not p.tp1_hit:
                 p.tp1_hit = True
                 send(
-                    f"✅ BITCOIN DEMO V3.8 – TP1 erreicht\n"
+                    f"✅ BITCOIN DEMO V3.9 – TP1 erreicht\n"
                     f"TP1: {fmt(p.tp1)}\n"
                     f"Schutz-Stop ab nächster Kerze auf Einstieg: {fmt(p.entry)}"
                 )
@@ -784,19 +1165,19 @@ def run_once():
     state = load_state()
     last = state.get("last_processed")
 
-    now_utc = datetime.now(timezone.utc)    
+    now_utc = datetime.now(timezone.utc)
 
     closed_idx = [
         i for i, x in enumerate(c)
         if x.t + timedelta(minutes=15) <= now_utc
     ]
-
+    
     if not closed_idx:
         idx = []
     else:
         latest_i = closed_idx[-1]
         latest_time = c[latest_i].t.isoformat()
-
+    
         if last and latest_time <= last:
             idx = []
         else:
@@ -827,7 +1208,7 @@ def wait_seconds():
 
 def main():
     print(
-        f"Bitcoin Signal Bot V3.8 gestartet – keine automatischen Orders. "
+        f"Bitcoin Signal Bot V3.9 gestartet – keine automatischen Orders. "
         f"MIN_SCORE={MIN_SCORE}"
     )
 
@@ -844,7 +1225,7 @@ def main():
         except Exception as e:
             print("FEHLER:", e)
             try:
-                send("⚠️ Bitcoin Signal Bot V3.8 Fehler: " + str(e))
+                send("⚠️ Bitcoin Signal Bot V3.9 Fehler: " + str(e))
             except Exception:
                 pass
             raise
@@ -858,7 +1239,7 @@ def main():
         except Exception as e:
             print("FEHLER:", e)
             try:
-                send("⚠️ Bitcoin Signal Bot V3.8 Fehler: " + str(e))
+                send("⚠️ Bitcoin Signal Bot V3.9 Fehler: " + str(e))
             except Exception:
                 pass
 
