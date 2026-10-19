@@ -1171,17 +1171,18 @@ def run_once():
         i for i, x in enumerate(c)
         if x.t + timedelta(minutes=15) <= now_utc
     ]
-    
+
+    # WICHTIG: GitHub-Schedules koennen verspaetet starten.
+    # Daher nicht nur die neueste geschlossene Kerze verarbeiten,
+    # sondern ALLE seit last_processed noch nicht bearbeiteten 15M-Kerzen.
     if not closed_idx:
         idx = []
+    elif last:
+        idx = [i for i in closed_idx if c[i].t.isoformat() > last]
     else:
-        latest_i = closed_idx[-1]
-        latest_time = c[latest_i].t.isoformat()
-    
-        if last and latest_time <= last:
-            idx = []
-        else:
-            idx = [latest_i]
+        # Beim allerersten Start nur die aktuellste Kerze nehmen,
+        # damit keine alten historischen Signale nachgesendet werden.
+        idx = [closed_idx[-1]]
 
     for i in idx:
         process(c, ef, es, atr, htf, i, state)
