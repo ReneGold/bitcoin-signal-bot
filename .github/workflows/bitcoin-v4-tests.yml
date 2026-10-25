@@ -22,3 +22,5 @@ jobs:
         run: python -m unittest -v test_bitcoin_risk_manager.py
       - name: Bitcoin Time Machine testen
         run: python -m unittest -v test_bitcoin_time_machine.py
+      - name: Bitcoin Entry Timer testen
+        run: python -m unittest -v test_bitcoin_entry_timer.py
