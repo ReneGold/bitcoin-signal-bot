@@ -5,7 +5,7 @@ import csv,json,os,requests
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
 
-INTERVALS={"15min":timedelta(minutes=15),"1h":timedelta(hours=1)}
+INTERVALS={"15min":timedelta(minutes=15),"5min":timedelta(minutes=5),"1h":timedelta(hours=1)}
 ROOT=Path("bitcoin_v4_history")
 def parse(payload,interval,now):
     if not isinstance(payload,dict) or payload.get("status")=="error":
@@ -49,7 +49,7 @@ def main():
     apikey=os.getenv("TWELVE_DATA_API_KEY","")
     ROOT.mkdir(exist_ok=True)
     summaries={}
-    for interval,limit in (("15min",5000),("1h",1600)):
+    for interval,limit in (("15min",5000),("5min",5000),("1h",1600)):
         data=fetch(interval,apikey,limit=limit)
         fn=ROOT/("btc_usd_"+interval+".csv")
         with fn.open("w",newline="",encoding="utf-8") as f:
