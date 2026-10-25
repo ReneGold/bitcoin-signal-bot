@@ -61,3 +61,15 @@ jobs:
           path: bitcoin_v4_history/
           retention-days: 14
           if-no-files-found: error
+      - name: Bitcoin V4 Score 60 65 70 Backtest
+        run: python bitcoin_v4_score_backtest.py
+      - name: Bitcoin V4 Backtest Ergebnisse exportieren
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-score-comparison
+          path: |
+            bitcoin_v4_score_summary.csv
+            bitcoin_v4_score_trades.csv
+          retention-days: 14
+          if-no-files-found: error
