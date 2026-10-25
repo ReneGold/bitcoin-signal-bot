@@ -47,3 +47,17 @@ jobs:
           path: bitcoin_v4_market_diagnostic.json
           if-no-files-found: error
           retention-days: 14
+      - name: Bitcoin historische Kursdaten Unit-Tests
+        run: python -m unittest -v test_bitcoin_v4_historical_fetch.py
+      - name: Bitcoin historische 15m und 1h Kursdaten laden
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python bitcoin_v4_historical_fetch.py
+      - name: Bitcoin historische Daten als Test-Artefakt
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-historical-candles
+          path: bitcoin_v4_history/
+          retention-days: 14
+          if-no-files-found: error
