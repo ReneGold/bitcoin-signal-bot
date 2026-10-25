@@ -85,3 +85,17 @@ jobs:
             bitcoin_v4_loss_analysis_trades.csv
           retention-days: 14
           if-no-files-found: error
+      - name: Bitcoin 5m Bestaetigung Vergleich Unit-Tests
+        run: python -m unittest -v test_bitcoin_v4_entry_confirmation_compare.py
+      - name: Bitcoin 5m Bestaetigung historische Auswertung
+        run: python bitcoin_v4_entry_confirmation_compare.py
+      - name: Bitcoin 5m Vergleichsergebnisse exportieren
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-5m-entry-comparison
+          path: |
+            bitcoin_v4_entry_confirm_trades.csv
+            bitcoin_v4_entry_confirm_summary.json
+          retention-days: 14
+          if-no-files-found: error
