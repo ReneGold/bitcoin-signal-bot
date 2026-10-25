@@ -30,3 +30,19 @@ jobs:
         run: python -m unittest -v test_bitcoin_news_volatility_filter.py
       - name: Bitcoin V4 Integration testen
         run: python -m unittest -v test_bitcoin_v4_research_pipeline.py
+      - name: Bitcoin V4 Marktdaten Unit-Tests
+        run: python -m unittest -v test_bitcoin_v4_market_diagnostic.py
+      - name: Bitcoin V4 echte 15m und 5m Daten diagnostizieren
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: |
+          pip install -r requirements.txt
+          python bitcoin_v4_market_diagnostic.py
+      - name: BTC Marktdatenbericht exportieren
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-market-diagnostic
+          path: bitcoin_v4_market_diagnostic.json
+          if-no-files-found: error
+          retention-days: 14
