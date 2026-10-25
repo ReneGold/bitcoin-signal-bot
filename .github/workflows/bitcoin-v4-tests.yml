@@ -24,3 +24,5 @@ jobs:
         run: python -m unittest -v test_bitcoin_time_machine.py
       - name: Bitcoin Entry Timer testen
         run: python -m unittest -v test_bitcoin_entry_timer.py
+      - name: Bitcoin Exit Planner testen
+        run: python -m unittest -v test_bitcoin_exit_planner.py
