@@ -99,3 +99,17 @@ jobs:
             bitcoin_v4_entry_confirm_summary.json
           retention-days: 14
           if-no-files-found: error
+      - name: Bitcoin Pullback Timer Unit-Tests
+        run: python -m unittest -v test_bitcoin_v4_pullback_timer.py
+      - name: Bitcoin Pullback vs Breakout Vergleich
+        run: python bitcoin_v4_pullback_compare.py
+      - name: Bitcoin Pullback Vergleich exportieren
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-pullback-comparison
+          path: |
+            bitcoin_v4_pullback_trades.csv
+            bitcoin_v4_pullback_summary.json
+          retention-days: 14
+          if-no-files-found: error
