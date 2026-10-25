@@ -28,3 +28,5 @@ jobs:
         run: python -m unittest -v test_bitcoin_exit_planner.py
       - name: Bitcoin News und Volatilitaet testen
         run: python -m unittest -v test_bitcoin_news_volatility_filter.py
+      - name: Bitcoin V4 Integration testen
+        run: python -m unittest -v test_bitcoin_v4_research_pipeline.py
