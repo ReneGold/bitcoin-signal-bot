@@ -1,1 +1,2 @@
 signal_open_utc,variant,side,status,entry_utc,entry_usd,stop_usd,last_bar_utc,state_json,exit_utc,net_R,reason
+2026-10-26T09:30:00+00:00,BASELINE,LONG,OPEN,2026-10-26T09:45:00+00:00,80550.0,80167.83691104785,2026-10-26T10:45:00+00:00,"{""stage"":0,""remaining"":1.0,""gross_R"":0.0,""status"":""OPEN"",""events"":[]}",,,PAPER_ONLY
