@@ -34,11 +34,17 @@ jobs:
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
         run: python bitcoin_v4_forward_shadow.py
+      - name: Bitcoin Paper-Tracker Unit Tests
+        run: python -m unittest -v test_bitcoin_v4_paper_tracker.py
+      - name: BTC simulierte Trades verfolgen
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python bitcoin_v4_paper_tracker.py
       - name: CSV Historie im Test-Branch sichern
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bitcoin_v4_forward_signals.csv
+          git add bitcoin_v4_forward_signals.csv bitcoin_v4_paper_trades.csv
           if ! git diff --cached --quiet; then
             git commit -m "Record BTC V4 forward shadow signals"
             git push origin HEAD:bitcoin-v4-test
@@ -49,6 +55,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bitcoin-v4-shadow-${{ github.run_id }}
-          path: bitcoin_v4_forward_signals.csv
+          path: |
+            bitcoin_v4_forward_signals.csv
+            bitcoin_v4_paper_trades.csv
           retention-days: 30
           if-no-files-found: error
