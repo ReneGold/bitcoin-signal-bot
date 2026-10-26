@@ -28,9 +28,9 @@ class PaperTrackerTests(unittest.TestCase):
         self.assertLess(float(r["net_R"]),0)
     def test_idempotent(self):
         x=make_rows([sig()],[]);b=[bar(T+timedelta(minutes=15))]
-        advance(x,b);original=json.dumps(x,sort_keys=True)
+        advance(x,b);original=json.dumps(list(x.values()),sort_keys=True)
         advance(x,b)
-        self.assertEqual(json.dumps(x,sort_keys=True),original)
+        self.assertEqual(json.dumps(list(x.values()),sort_keys=True),original)
     def test_no_backfilled_missing_entry(self):
         x=make_rows([sig()],[])
         advance(x,[bar(T+timedelta(minutes=30))])
