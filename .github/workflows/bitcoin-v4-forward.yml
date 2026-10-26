@@ -1,0 +1,54 @@
+name: Bitcoin V4 Forward Shadow
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bitcoin-v4-shadow-ledger
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Nur Bitcoin V4 Test-Branch laden
+        uses: actions/checkout@v4
+        with:
+          ref: bitcoin-v4-test
+          persist-credentials: true
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Abhaengigkeiten installieren
+        run: python -m pip install -r requirements.txt
+      - name: Bitcoin Shadow Unit Tests
+        run: python -m unittest -v test_bitcoin_v4_forward_shadow.py
+      - name: Bitcoin neue geschlossene Kerzen vergleichen
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python bitcoin_v4_forward_shadow.py
+      - name: CSV Historie im Test-Branch sichern
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bitcoin_v4_forward_signals.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "Record BTC V4 forward shadow signals"
+            git push origin HEAD:bitcoin-v4-test
+          else
+            echo "No new BTC signals in this run"
+          fi
+      - name: Bitcoin Beobachtungen exportieren
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-shadow-${{ github.run_id }}
+          path: bitcoin_v4_forward_signals.csv
+          retention-days: 30
+          if-no-files-found: error
