@@ -1,2 +1,3 @@
 signal_open_utc,signal_closed_utc,side,score,entry_reference_usd,stop_usd,baseline_accepted,asymmetric_accepted,trend_1h,ema_spread_over_atr,mode
 2026-10-26T09:30:00+00:00,2026-10-26T09:45:00+00:00,LONG,60,80550.01,80167.83691104785,1,0,NEUTRAL,0.049373,SHADOW_NO_ORDERS_NO_TELEGRAM
+2026-10-26T15:30:00+00:00,2026-10-26T15:45:00+00:00,LONG,60,80700.0,80274.13951832856,1,0,NEUTRAL,0.131217,SHADOW_NO_ORDERS_NO_TELEGRAM
