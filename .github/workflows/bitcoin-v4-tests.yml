@@ -113,3 +113,17 @@ jobs:
             bitcoin_v4_pullback_summary.json
           retention-days: 14
           if-no-files-found: error
+      - name: Bitcoin Marktphasenfilter Unit-Tests
+        run: python -m unittest -v test_bitcoin_v4_market_phase_compare.py
+      - name: Bitcoin 1h Trend und Marktstaerke vergleichen
+        run: python bitcoin_v4_market_phase_compare.py
+      - name: Bitcoin Marktphasenvergleich exportieren
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-market-phase-comparison
+          path: |
+            bitcoin_v4_market_phase_summary.csv
+            bitcoin_v4_market_phase_trades.csv
+          retention-days: 14
+          if-no-files-found: error
