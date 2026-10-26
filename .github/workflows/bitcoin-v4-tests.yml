@@ -127,3 +127,17 @@ jobs:
             bitcoin_v4_market_phase_trades.csv
           retention-days: 14
           if-no-files-found: error
+      - name: Bitcoin Long Short Strategie Unit-Tests
+        run: python -m unittest -v test_bitcoin_v4_asymmetric_backtest.py
+      - name: Bitcoin Long Short Strategie vollstaendig simulieren
+        run: python bitcoin_v4_asymmetric_backtest.py
+      - name: Bitcoin Long Short Ergebnisse exportieren
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-v4-asymmetric-backtest
+          path: |
+            bitcoin_v4_asymmetric_summary.csv
+            bitcoin_v4_asymmetric_trades.csv
+          retention-days: 14
+          if-no-files-found: error
